@@ -24,7 +24,7 @@ fi
 # Clone annotate repository
 if [ ! -d "annotate" ]; then
     echo "📥 Cloning annotate repository..."
-    git clone https://github.com/TobyAbel/ocn-annotate.git annotate
+    git clone https://code.europa.eu/leos/annotate.git annotate
 else
     echo "✅ Annotate repository already exists"
 fi
