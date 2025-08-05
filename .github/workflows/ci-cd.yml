@@ -1,0 +1,172 @@
+name: LEOS CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  JAVA_VERSION: '8'
+  NODE_VERSION: '18'
+
+jobs:
+  # Test and Build Job
+  test-and-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Set up Java ${{ env.JAVA_VERSION }}
+      uses: actions/setup-java@v3
+      with:
+        java-version: ${{ env.JAVA_VERSION }}
+        distribution: 'temurin'
+        cache: 'maven'
+        
+    - name: Set up Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+        cache-dependency-path: leos/modules/ui-angular/package-lock.json
+        
+    - name: Cache Maven packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.m2
+        key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+        restore-keys: ${{ runner.os }}-m2
+        
+    - name: Cache npm packages
+      uses: actions/cache@v3
+      with:
+        path: leos/modules/ui-angular/node_modules
+        key: ${{ runner.os }}-node-${{ hashFiles('leos/modules/ui-angular/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+          
+    - name: Run tests
+      run: |
+        cd leos
+        mvn test -DskipTests=false
+        
+    - name: Build Angular application
+      run: |
+        cd leos/modules/ui-angular
+        npm ci
+        npm run build-prod-skip-test
+        
+    - name: Build WAR file
+      run: |
+        cd leos
+        mvn clean package -DskipTests=true
+        
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: leos-war-file
+        path: leos/target/*.war
+        
+  # Deploy to Staging (develop branch)
+  deploy-staging:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: leos-war-file
+        
+    - name: Deploy to staging environment
+      run: |
+        echo "Deploying to staging environment..."
+        # Add your staging deployment logic here
+        # Example for GCP:
+        # gcloud app deploy --version staging --project your-project-id
+        
+    - name: Notify staging deployment
+      run: |
+        echo "✅ Staging deployment completed"
+        echo "🌐 Staging URL: https://staging.leos.example.com"
+        
+  # Deploy to Production (main branch)
+  deploy-production:
+    needs: test-and-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Download build artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: leos-war-file
+        
+    - name: Deploy to production environment
+      run: |
+        echo "Deploying to production environment..."
+        # Add your production deployment logic here
+        # Example for GCP:
+        # gcloud app deploy --version production --project your-project-id
+        
+    - name: Notify production deployment
+      run: |
+        echo "✅ Production deployment completed"
+        echo "🌐 Production URL: https://leos.example.com"
+        
+  # Security scan
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Run OWASP dependency check
+      uses: dependency-check/Dependency-Check_Action@main
+      with:
+        project: 'LEOS'
+        path: '.'
+        format: 'HTML'
+        out: 'reports'
+        
+    - name: Upload security report
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-report
+        path: reports/
+        
+  # Performance test
+  performance-test:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    - name: Run performance tests
+      run: |
+        echo "Running performance tests against staging environment..."
+        # Add your performance testing logic here
+        # Example with Apache Bench:
+        # ab -n 1000 -c 10 https://staging.leos.example.com/app/
+        
+    - name: Upload performance report
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-report
+        path: performance-results/ 

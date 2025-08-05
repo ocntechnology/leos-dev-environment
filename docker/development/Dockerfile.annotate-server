@@ -1,0 +1,35 @@
+FROM openjdk:8-jdk-alpine
+
+# Install necessary packages
+RUN apk add --no-cache \
+    maven \
+    git \
+    curl \
+    bash
+
+# Set working directory
+WORKDIR /app
+
+# Copy Maven wrapper and pom files
+COPY mvnw .
+COPY .mvn .mvn
+COPY pom.xml .
+
+# Make mvnw executable
+RUN chmod +x mvnw
+
+# Download dependencies
+RUN ./mvnw dependency:go-offline -B
+
+# Copy source code
+COPY . .
+
+# Expose port
+EXPOSE 9099
+
+# Set environment variables for development
+ENV SPRING_PROFILES_ACTIVE=development
+ENV JAVA_OPTS="-Xmx1g -Xms512m -Dspring.devtools.restart.enabled=true"
+
+# Default command for development with hot reloading
+CMD ["./mvnw", "spring-boot:run"] 

@@ -1,0 +1,168 @@
+version: '3.8'
+
+services:
+  # Database for development
+  database:
+    image: postgres:15-alpine
+    container_name: leos-database-dev
+    environment:
+      POSTGRES_DB: leos
+      POSTGRES_USER: leos
+      POSTGRES_PASSWORD: leos123
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/development/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    networks:
+      - leos-network
+
+  # H2 Database for development (alternative to PostgreSQL)
+  h2-database:
+    image: oscarfonts/h2:latest
+    container_name: leos-h2-dev
+    environment:
+      H2_OPTIONS: "-ifNotExists"
+    ports:
+      - "9093:1521"
+      - "9094:81"
+    volumes:
+      - h2_data:/h2-data
+    networks:
+      - leos-network
+
+  # CMIS Repository
+  cmis-repository:
+    image: chemistry/chemistry-opencmis-server-inmemory:1.1.0
+    container_name: leos-cmis-dev
+    ports:
+      - "9090:8080"
+    environment:
+      JAVA_OPTS: "-Xmx2g -Xms1g"
+    networks:
+      - leos-network
+
+  # LEOS Services (Spring Boot)
+  leos-services:
+    build:
+      context: ./leos
+      dockerfile: ../docker/development/Dockerfile.leos-services
+    container_name: leos-services-dev
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=development
+      - LEOS_DB_URL=jdbc:h2:mem:leos
+      - LEOS_CMIS_URL=http://cmis-repository:8080/chemistry-opencmis-server-inmemory
+      - ANNOTATE_SERVER_URL=http://annotate-server:9099
+      - JAVA_OPTS=-Xmx2g -Xms1g -Dspring.devtools.restart.enabled=true
+    volumes:
+      - ./leos:/app
+      - maven_cache:/root/.m2
+    depends_on:
+      - cmis-repository
+      - h2-database
+    networks:
+      - leos-network
+    command: ["./mvnw", "spring-boot:run", "-Dspring-boot.run.jvmArguments=-Xmx2g"]
+
+  # Annotation Server
+  annotate-server:
+    build:
+      context: ./annotate
+      dockerfile: ../docker/development/Dockerfile.annotate-server
+    container_name: leos-annotate-server-dev
+    ports:
+      - "9099:9099"
+    environment:
+      - SPRING_PROFILES_ACTIVE=development
+      - LEOS_DB_URL=jdbc:h2:mem:annotate
+      - JAVA_OPTS=-Xmx1g -Xms512m -Dspring.devtools.restart.enabled=true
+    volumes:
+      - ./annotate:/app
+      - maven_cache:/root/.m2
+    depends_on:
+      - h2-database
+    networks:
+      - leos-network
+    command: ["./mvnw", "spring-boot:run"]
+
+  # LEOS UI (Angular)
+  leos-ui:
+    build:
+      context: ./leos/modules/ui-angular
+      dockerfile: ../../../docker/development/Dockerfile.leos-ui
+    container_name: leos-ui-dev
+    ports:
+      - "4200:4200"
+    environment:
+      - NODE_ENV=development
+      - LEOS_API_URL=http://leos-services:8080
+      - ANNOTATE_SERVER_URL=http://annotate-server:9099
+    volumes:
+      - ./leos/modules/ui-angular:/app
+      - /app/node_modules
+    depends_on:
+      - leos-services
+    networks:
+      - leos-network
+    command: ["npm", "run", "start-local"]
+
+  # Annotation Client (Angular)
+  annotate-client:
+    build:
+      context: ./annotate/client-angular
+      dockerfile: ../../docker/development/Dockerfile.annotate-client
+    container_name: leos-annotate-client-dev
+    ports:
+      - "4201:4200"
+    environment:
+      - NODE_ENV=development
+      - ANNOTATE_SERVER_URL=http://annotate-server:9099
+    volumes:
+      - ./annotate/client-angular:/app
+      - /app/node_modules
+    depends_on:
+      - annotate-server
+    networks:
+      - leos-network
+    command: ["npm", "run", "start-local"]
+
+  # Nginx Reverse Proxy
+  nginx:
+    image: nginx:alpine
+    container_name: leos-nginx-dev
+    ports:
+      - "80:80"
+    volumes:
+      - ./docker/development/nginx.conf:/etc/nginx/nginx.conf
+      - ./docker/development/nginx-dev.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - leos-services
+      - leos-ui
+      - annotate-server
+      - annotate-client
+    networks:
+      - leos-network
+
+  # Redis for caching (optional)
+  redis:
+    image: redis:7-alpine
+    container_name: leos-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - leos-network
+
+volumes:
+  postgres_data:
+  h2_data:
+  maven_cache:
+  redis_data:
+
+networks:
+  leos-network:
+    driver: bridge 

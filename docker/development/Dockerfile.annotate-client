@@ -1,0 +1,31 @@
+FROM node:20-alpine
+
+# Install necessary packages
+RUN apk add --no-cache \
+    git \
+    curl \
+    bash
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY angular.json ./
+COPY tsconfig*.json ./
+
+# Install dependencies
+RUN npm install --legacy-peer-deps
+
+# Copy source code
+COPY . .
+
+# Expose port
+EXPOSE 4200
+
+# Set environment variables for development
+ENV NODE_ENV=development
+ENV ANNOTATE_SERVER_URL=http://annotate-server:9099
+
+# Default command for development with hot reloading
+CMD ["npm", "run", "start-local"] 
