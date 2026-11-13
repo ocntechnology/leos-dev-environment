@@ -13,7 +13,7 @@ env:
 jobs:
   # Test and Build Job
   test-and-build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     
     steps:
     - name: Checkout code
@@ -73,7 +73,7 @@ jobs:
   # Deploy to Staging (develop branch)
   deploy-staging:
     needs: test-and-build
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     if: github.ref == 'refs/heads/develop'
     environment: staging
     
@@ -101,7 +101,7 @@ jobs:
   # Deploy to Production (main branch)
   deploy-production:
     needs: test-and-build
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     if: github.ref == 'refs/heads/main'
     environment: production
     
@@ -128,7 +128,7 @@ jobs:
         
   # Security scan
   security-scan:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     
     steps:
     - name: Checkout code
@@ -151,7 +151,7 @@ jobs:
   # Performance test
   performance-test:
     needs: deploy-staging
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     if: github.ref == 'refs/heads/develop'
     
     steps:
